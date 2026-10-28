@@ -5,7 +5,7 @@ Status: draft v1 · Last updated: 2026-10-28
 ## 1. The packaging decision
 
 **PyPI, not npm.** The tool is ~150 lines of Python on top of `rich`
-([headroom-charts.py:5-11](file:///mnt/data/Liberary/ai/plugin/headroom-charts/headroom-charts.py#L5)).
+([headroom-charts.py:5-11](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py#L5)).
 Re-implementing it for npm means rewriting every panel, table and bar in `ink` or
 `blessed`, discarding working code, and still not giving an npm user a Python
 runtime. The dependency graph is one library deep; PyPI is the native home for it.
@@ -78,7 +78,7 @@ imports beyond `theme.py`.
 
 **`cli.py`** is the impure shell: parse args, loop, sleep, catch `KeyboardInterrupt`.
 The `Live` loop currently at
-[headroom-charts.py:143-151](file:///mnt/data/Liberary/ai/plugin/headroom-charts/headroom-charts.py#L143)
+[headroom-charts.py:143-151](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py#L143)
 moves here and gains a `--once` short-circuit.
 
 ## 4. pyproject.toml
@@ -104,23 +104,25 @@ build-backend = "uv_build"
 `[project.scripts]` is what turns the wheel into the `headroom-charts` command, and
 is the single most important line in the file.
 
-## 5. Known defects to carry into tickets
+## 5. Known defects in the baseline, and where they stand
 
-Grounded in the current implementation, not speculative:
+Grounded in [`headroom-charts.py` at `778c6ab`](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py), not speculative. Items 1, 2, 4, 5 and 6 are fixed by the packaged CLI; 3 is mitigated.
 
 1. **Unbounded read.** `f.readlines()[-100:]` at
-   [headroom-charts.py:29](file:///mnt/data/Liberary/ai/plugin/headroom-charts/headroom-charts.py#L29)
+   [headroom-charts.py:29](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py#L29)
    loads the whole file to keep the last 100 lines, every second. Cost grows with
    file size and the constant is hardcoded independently of `MAX_BARS`.
 2. **Hardcoded path and constants.** `SAVINGS_FILE`, `MAX_BARS`, `CHART_HEIGHT` at
-   [headroom-charts.py:20-22](file:///mnt/data/Liberary/ai/plugin/headroom-charts/headroom-charts.py#L20)
+   [headroom-charts.py:20-22](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py#L20)
    make the tool unusable outside one specific setup.
-3. **Truecolor-only palette.** Every brand colour is a hex value; terminals limited
-   to 256 or 16 colours render degraded or wrong, with no escape hatch.
+3. **Truecolor-only palette.** Every brand colour is a hex value. Measured against
+   `TERM=dumb`, `vt100` and `xterm-256color`, `rich` downgrades the hex colours to
+   the best supported system on its own, so this is a colour-fidelity question
+   rather than a crash; `--no-color` pins it to the 8-colour system.
 4. **Fixed-width chart ignores terminal size.** 20 bars × 3 columns + an 8-column
    gutter is ~68 columns minimum and can silently wrap or crop below that.
 5. **Small bars round to zero.** `int()` truncation at
-   [headroom-charts.py:51](file:///mnt/data/Liberary/ai/plugin/headroom-charts/headroom-charts.py#L51)
+   [headroom-charts.py:51](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py#L51)
    makes a low-but-nonzero `saved` render as no bar at all.
 6. **Ambiguous KPI labels.** "Cost Avoided" is a window sum but reads like a
    lifetime total.

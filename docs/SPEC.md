@@ -92,8 +92,10 @@ confused:
 
 ### 4.3 Palette
 
-Brand colours are the 24-bit hex values from the original HTML mockup. They render
-as `Text`/`Panel` styles on `rich`, which requires truecolor.
+Brand colours are the 24-bit hex values from the original HTML mockup. `rich`
+resolves them against whatever colour system the terminal reports, so a 256-colour
+or monochrome terminal gets a faithful approximation rather than an error; measured
+on `TERM=dumb`, `vt100` and `xterm-256color`.
 
 | Name | Hex | Role |
 |---|---|---|
@@ -103,9 +105,9 @@ as `Text`/`Panel` styles on `rich`, which requires truecolor.
 | `MAROON` | `#6F1D1B` | header background, model column |
 | `IVORY` | `#EFE3D2` | text and labels |
 
-## 5. CLI surface (target state)
+## 5. CLI surface
 
-The reference implementation hardcodes everything. The packaged tool takes:
+Implemented in `headroom_charts.cli`. The baseline script hardcoded all of it.
 
 ```
 headroom-charts [OPTIONS]
@@ -117,7 +119,7 @@ headroom-charts [OPTIONS]
   --events N        rows in the footer table   [default 5]
   --once            render one frame and exit (no live loop; for CI/screenshots)
   --demo            synthesise events instead of reading a file
-  --no-color        fall back to ANSI 16-colour when truecolor is unavailable
+  --no-color        pin the palette to 8 colours instead of the terminal's best match
   --version / --help
 ```
 

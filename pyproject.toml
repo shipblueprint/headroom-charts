@@ -1,0 +1,45 @@
+[project]
+name = "headroom-charts"
+version = "0.1.0"
+description = "Live terminal dashboard for headroom token-compression savings"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "shipblueprint" }]
+keywords = ["tui", "dashboard", "rich", "llm", "token-savings"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: User Interfaces",
+    "Topic :: Terminals",
+]
+dependencies = ["rich>=13.0"]
+
+[project.urls]
+Homepage = "https://github.com/shipblueprint/headroom-charts"
+Repository = "https://github.com/shipblueprint/headroom-charts"
+Issues = "https://github.com/shipblueprint/headroom-charts/issues"
+
+[project.scripts]
+headroom-charts = "headroom_charts.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.5,<2"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.8"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
