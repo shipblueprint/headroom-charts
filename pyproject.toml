@@ -40,6 +40,18 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+# app.py is the original script verbatim. Packaging must not rewrite it, so the
+# vendored renderer is exempt from style rules that would force edits.
+[tool.ruff.lint.per-file-ignores]
+"src/headroom_charts/app.py" = ["ALL"]
+
+[tool.ruff.format]
+exclude = ["src/headroom_charts/app.py"]
+
 [tool.mypy]
 python_version = "3.10"
 strict = false
+
+[[tool.mypy.overrides]]
+module = "headroom_charts.app"
+ignore_errors = true

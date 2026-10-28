@@ -1,140 +1,118 @@
-# headroom-charts — Architecture & Packaging
+# headroom-charts — Packaging Architecture
 
-Status: draft v1 · Last updated: 2026-10-28
+Status: v1 · Last updated: 2026-10-28
 
 ## 1. The packaging decision
 
-**PyPI, not npm.** The tool is ~150 lines of Python on top of `rich`
-([headroom-charts.py:5-11](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py#L5)).
-Re-implementing it for npm means rewriting every panel, table and bar in `ink` or
-`blessed`, discarding working code, and still not giving an npm user a Python
-runtime. The dependency graph is one library deep; PyPI is the native home for it.
-
-Distribution is a spectrum, and the first two are not mutually exclusive:
+**PyPI, not npm.** The tool is ~150 lines of Python on one dependency, `rich`.
+Shipping it through npm would mean rewriting every panel, table and bar in `ink` or
+`blessed` — discarding working code, and still leaving the npm user without a Python
+runtime. The dependency graph is one library deep; PyPI is its native home.
 
 | Route | Install UX | Cost | Verdict |
 |---|---|---|---|
-| **PyPI** + `pipx`/`uvx` | `uvx headroom-charts` | near zero | **Do this.** Isolated env, global command, no system-Python damage |
-| **Standalone binary** (PyInstaller) per OS/arch | download one file from a GitHub Release | CI matrix, ~30MB artifacts, no auto-update | Do later, only if users genuinely lack Python |
-| npm wrapping a Python wheel | `npm i -g` | a build shim that solves nothing | Reject |
-| Homebrew tap / AUR | `brew install` | maintain a formula per release | Nice-to-have after PyPI |
+| **PyPI** + `pipx`/`uvx` | `uvx headroom-charts` | near zero | **Taken.** Isolated env, global command, no damage to system Python |
+| Standalone binary per OS/arch (PyInstaller) | one file from a GitHub Release | CI matrix, ~30MB artifacts, no auto-update | Deferred to issue #7; only worth it if users genuinely lack Python |
+| npm wrapping a wheel | `npm i -g` | a shim that solves nothing | Rejected |
+| Homebrew tap / AUR | `brew install` | a formula to maintain per release | Optional later |
 
-A binary is *not* a substitute for the PyPI package — it is a second artifact over
-the same source, so the package is built first either way.
+A binary is a second artifact over the same source, not an alternative to the
+package — so the package comes first either way.
 
-`headroom-charts` and `headroom-tui` are unclaimed on PyPI as of 2026-10-28.
-`headroom` itself is taken, so the distribution name must keep a suffix.
+`headroom-charts` and `headroom-tui` were unclaimed on PyPI as of 2026-10-28;
+`headroom` itself is taken, so the distribution name needs a suffix.
 
-## 2. Target layout
+## 2. Layout
 
 ```
 headroom-charts/
+├── headroom-charts.py            # thin shim: from headroom_charts.app import run
 ├── pyproject.toml
-├── README.md
-├── LICENSE
-├── docs/
-│   ├── SPEC.md
-│   └── ARCHITECTURE.md
-├── src/
-│   └── headroom_charts/
-│       ├── __init__.py      # __version__ only
-│       ├── __main__.py      # python -m headroom_charts
-│       ├── cli.py           # argparse, exit codes, the Live loop
-│       ├── config.py        # resolved settings dataclass
-│       ├── events.py        # Event dataclass + bounded tail reader
-│       ├── chart.py         # vertical bar renderer
-│       ├── dashboard.py     # Layout: header / kpi / chart / footer
-│       └── theme.py         # the five brand hex constants
+├── src/headroom_charts/
+│   ├── __init__.py               # __version__
+│   ├── app.py                    # THE ORIGINAL SCRIPT, verbatim
+│   ├── cli.py                    # main() -> app.run()
+│   └── __main__.py               # python -m headroom_charts
 └── tests/
-    ├── test_events.py
-    ├── test_chart.py
-    └── test_dashboard_snapshot.py
+    ├── data/events.jsonl         # fixture log
+    ├── golden/frame_100x30.txt   # frame captured from the original script
+    └── test_parity.py
 ```
 
-Flat module set — no sub-packages, no plugin system. Six modules is the point where
-each has one reason to change; beyond that this tool does not need abstraction.
+Four files of substance, and `app.py` is the only one that contains program logic.
 
-## 3. Module boundaries
+## 3. Parity policy
 
-**`events.py` — the only module that touches the filesystem.**
+The job was distribution, not redesign. Three rules keep that true:
 
-```python
-@dataclass(frozen=True)
-class Event:
-    ts: str; model: str; saved: int; cost_usd: float
+**One implementation.** `app.py` holds the original code, and every entry point —
+the root script, the `headroom-charts` console command, and `python -m
+headroom_charts` — routes to the same `app.run`. There is no second copy to drift.
+`test_console_script_and_root_script_share_one_implementation` asserts the three
+resolve to the identical function object.
 
-def read_events(path: Path, limit: int) -> list[Event]: ...
-```
+**Byte-level golden.** [`tests/golden/frame_100x30.txt`](../tests/golden/frame_100x30.txt)
+was captured by running the *original* [`headroom-charts.py` at `778c6ab`](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py)
+against the fixture log at 100×30 truecolour. `app.py`'s render must equal it exactly.
+Verified to bite: setting `CHART_HEIGHT = 8`, or changing one palette hex, fails it.
 
-Owns: absent-file handling, malformed-line skipping, per-field defaults, and the
-bounded read. Everything above it takes `list[Event]` and is pure — which is what
-makes `--once` and snapshot tests possible without mocking the disk.
+**No autoformatting the renderer.** `app.py` is excluded from ruff lint and format,
+and from mypy, in `pyproject.toml`. The original has long lines and an unused
+`deque` import; rewriting those is a change to the file we promise is verbatim, and
+formatting is how behaviour changes sneak in. Style debt is quarantined to one
+commented exemption rather than spread through edits.
 
-**`chart.py`** takes `(events, height, width)` → `rich.text.Text`. No I/O, no theme
-imports beyond `theme.py`.
-
-**`dashboard.py`** composes panels from the pure renderers. Takes `(events, config)`
-→ `Layout`.
-
-**`cli.py`** is the impure shell: parse args, loop, sleep, catch `KeyboardInterrupt`.
-The `Live` loop currently at
-[headroom-charts.py:143-151](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py#L143)
-moves here and gains a `--once` short-circuit.
+Confirmed in a pty against an identical events file at 100×30: the two entry points
+emitted **28,891 bytes each, byte-for-byte equal**, and both exited `0`.
 
 ## 4. pyproject.toml
 
-`uv_build` backend; no setuptools, no setup.py, no `__init__` version duplication.
+`uv_build` backend — no setuptools, no `setup.py`, no duplicated version.
 
 ```toml
 [project]
 name = "headroom-charts"
 version = "0.1.0"
-description = "Live terminal dashboard for headroom token-compression savings"
 requires-python = ">=3.10"
+license = "MIT"
 dependencies = ["rich>=13.0"]
 
 [project.scripts]
 headroom-charts = "headroom_charts.cli:main"
-
-[build-system]
-requires = ["uv_build>=0.5"]
-build-backend = "uv_build"
 ```
 
-`[project.scripts]` is what turns the wheel into the `headroom-charts` command, and
-is the single most important line in the file.
+`[project.scripts]` is the line that turns the wheel into a command, and the reason
+`pipx install` gives you a working `headroom-charts` binary.
 
-## 5. Known defects in the baseline, and where they stand
+## 5. Defects in the original, preserved on purpose
 
-Grounded in [`headroom-charts.py` at `778c6ab`](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py), not speculative. Items 1, 2, 4, 5 and 6 are fixed by the packaged CLI; 3 is mitigated.
+These were found while packaging and **deliberately not fixed**, because the
+requirement was that the packaged command match the script. Each is an open issue;
+none is visible in the parity tests, which is the point.
 
-1. **Unbounded read.** `f.readlines()[-100:]` at
-   [headroom-charts.py:29](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py#L29)
-   loads the whole file to keep the last 100 lines, every second. Cost grows with
-   file size and the constant is hardcoded independently of `MAX_BARS`.
-2. **Hardcoded path and constants.** `SAVINGS_FILE`, `MAX_BARS`, `CHART_HEIGHT` at
-   [headroom-charts.py:20-22](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py#L20)
-   make the tool unusable outside one specific setup.
-3. **Truecolor-only palette.** Every brand colour is a hex value. Measured against
-   `TERM=dumb`, `vt100` and `xterm-256color`, `rich` downgrades the hex colours to
-   the best supported system on its own, so this is a colour-fidelity question
-   rather than a crash; `--no-color` pins it to the 8-colour system.
-4. **Fixed-width chart ignores terminal size.** 20 bars × 3 columns + an 8-column
-   gutter is ~68 columns minimum and can silently wrap or crop below that.
-5. **Small bars round to zero.** `int()` truncation at
-   [headroom-charts.py:51](https://github.com/shipblueprint/headroom-charts/blob/778c6ab/headroom-charts.py#L51)
-   makes a low-but-nonzero `saved` render as no bar at all.
-6. **Ambiguous KPI labels.** "Cost Avoided" is a window sum but reads like a
-   lifetime total.
+1. **The events table always clips.** The footer is allocated 8 rows but 5 data rows
+   plus header and separator need 10, so **3 of 5 events are ever shown** — measured
+   at both 24 and 30 rows tall, so it is not a short-terminal edge case. Issue #8.
+2. **The x-axis can be pushed off-screen.** At 24 rows the chart's baseline and minute
+   labels are clipped away entirely (`axis drawn = False`), leaving bars with no time
+   reference. Issue #8.
+3. **Whole-file read every second.** `f.readlines()[-100:]` loads the entire log into
+   memory to keep the last 100 lines, once per repaint. Correct, but cost grows with
+   file size, and `100` is unrelated to `MAX_BARS = 20`. Issue #9.
+4. **Low savings render as no bar at all.** `int((val / max_val) * 10)` truncates, so
+   any event under 5% of the window peak disappears. Issue #9.
+5. **Nothing is configurable.** Path, `MAX_BARS`, `CHART_HEIGHT` and the 1s interval
+   are module constants; the command takes no arguments. Issue #9.
+6. **Minute-only labels across an hour.** A real window crossing 21:06 to 01:02
+   rendered as `23 02 08 14 21 55 44` — correct, and unreadable. Issue #4.
 
 ## 6. Release flow
 
 ```
-push main → CI: ruff check, mypy, pytest, uv build, twine check
+push main → CI: ruff, mypy, pytest (parity), uv build, twine check
 tag v*    → CI: uv publish to PyPI + attach sdist/wheel to the GitHub Release
 ```
 
-PyPI credentials are a trusted-publishing (OIDC) setup, not a long-lived token in
-repo secrets, and must be scoped to the `headroom-charts` project only.
-Binary builds, if taken on later, are a separate matrix workflow that cannot fail
-the Python release.
+PyPI credentials should be trusted publishing (OIDC), scoped to this project — not a
+long-lived token in repo secrets. Publishing is issue #2 and needs a human: PyPI
+releases are effectively immutable, so a botched `0.1.0` can only be skipped over.

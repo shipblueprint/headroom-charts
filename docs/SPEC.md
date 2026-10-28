@@ -1,32 +1,21 @@
-# headroom-charts — Product Specification
+# headroom-charts — Behaviour Specification
 
-Status: draft v1 · Owner: shipblueprint · Last updated: 2026-10-28
+Status: v1, describing shipped behaviour · Last updated: 2026-10-28
 
-## 1. Problem
+**Source of truth is the code, not this document.** [`src/headroom_charts/app.py`](../src/headroom_charts/app.py)
+is the original `headroom-charts.py` verbatim; this file describes what that code
+does so a packaging change can be checked against it. It is not a wish list.
 
-A context-compression proxy writes token-savings events to a JSONL file while it
-runs. Today the only way to watch them is `tail -f` and read raw JSON. There is
-no way to answer, at a glance and without leaving the terminal:
+## 1. Purpose
 
-- How many tokens has compression saved me recently?
-- What did that avoid in dollars?
-- Is the saving rate per call trending up or down?
-- Which model produced the last few events?
+Watch a context-compression proxy's token savings while it runs, in one terminal
+screen, without `tail -f` and reading raw JSON. A viewer only — it never writes the
+events file.
 
-`headroom-charts` is a single-screen live dashboard over that file. It is a
-*viewer only*.
+## 2. Data contract
 
-## 2. Audience
-
-Developers running the headroom compression proxy on their own machine. They
-have a terminal, care about token spend, and want the dashboard to start with one
-command.
-
-## 3. Data contract
-
-Source of truth: `~/.headroom/savings_events.jsonl`
-
-Append-only JSON Lines, one event per line, schema version `v: 2`. A real line:
+`~/.headroom/savings_events.jsonl` — append-only JSON Lines, one event per line,
+schema version `v: 2`. A real line:
 
 ```json
 {"v":2,"ts":"2026-10-27T21:06:59.766090+00:00","before":65046,"after":62184,
@@ -34,120 +23,94 @@ Append-only JSON Lines, one event per line, schema version `v: 2`. A real line:
  "source":"proxy","pid":27451,"saved_tool_schema":0}
 ```
 
-| Field | Type | Consumed by the dashboard | Notes |
+| Field | Type | Used | Notes |
 |---|---|---|---|
-| `v` | int | no | schema version; currently always `2` |
-| `ts` | string | **yes** | ISO-8601 with offset; `HH:MM` slice assumes `YYYY-MM-DDTHH:MM:SS` |
+| `v` | int | no | always `2` in observed data |
+| `ts` | string | **yes** | ISO-8601 with offset; sliced as `[11:16]` for `HH:MM` and `[:19]` for the table |
 | `before` | int | no | prompt tokens pre-compression |
 | `after` | int | no | prompt tokens post-compression |
-| `saved` | int | **yes** | bar height + token KPI |
+| `saved` | int | **yes** | bar height and the token KPI |
 | `cost_usd` | float | **yes** | cost KPI |
-| `model` | string | **yes** | events-table column |
-| `client` | string | no | e.g. `opencode`; candidate for a future column |
-| `source` | string | no | e.g. `proxy` |
-| `pid` | int | no | writer process |
-| `saved_tool_schema` | int | no | tokens saved on tool schemas specifically |
+| `model` | string | **yes** | table column |
+| `client`, `source`, `pid`, `saved_tool_schema` | — | no | present in the log, not displayed |
 
-Robustness rules the viewer must honour:
+Tolerated input:
 
-- The file may not exist yet. Empty dashboard, not a crash.
-- Lines may be malformed or half-written (a reader can catch a partial append).
-  Skip them silently and continue.
-- Any field may be absent. Fall back to a permissive default (`0`, `"unknown"`).
+- File absent → `get_events()` returns `[]` and the chart prints `Waiting for data...`.
+- Malformed line → `json.JSONDecodeError` is caught and the line skipped.
+- Missing field → `.get()` default of `0`, `0.0` or `"unknown"`.
+- Only the **last 100 lines** of the file are considered, then trimmed to the last
+  20 for plotting.
 
-## 4. Interface
+## 3. Interface
 
-Fixed 4-zone vertical layout, drawn to the alternate screen (`screen=True`) so the
-user's scrollback is untouched, and repainted once per second.
+Four zones in a `rich` `Layout`, repainted once per second on the alternate screen
+(`Live(screen=True, refresh_per_second=1)`).
 
-```
-╭─ HEADROOM COMPRESSION DASHBOARD ─╮   header   3 rows
-╭─ KPI row ────────────────────────╮   kpi      5 rows
-  Tokens Saved (Recent) | Cost Avoided | Compressions
-╭─ Live Tokens Saved Per Call ─────╮   chart    fills remaining height
-  vertical bars, y-axis gutter, x-axis time labels
-╭─ Latest Events ──────────────────╯   footer   8 rows
-  Time | Model | Saved      (last 5, newest first)
-```
+| Zone | Rows | Contents |
+|---|---|---|
+| header | 3 | `HEADROOM COMPRESSION DASHBOARD`, ivory-on-maroon, RUST border |
+| kpi | 5 | `Tokens Saved (Recent)` · `Cost Avoided` · `Compressions` |
+| chart | ratio 1 | `Live Tokens Saved Per Call`, HARVEST border, bars over an axis |
+| footer | 8 | `Latest Events` table, last 5 as `Time │ Model │ Saved`, newest first |
 
-### 4.1 Chart
+Chart, exactly as implemented:
 
-- One vertical bar per event in the display window, oldest on the left.
-- Default window: last **20** events (`MAX_BARS`).
-- Default plot height: **10** rows (`CHART_HEIGHT`), scaled to the largest `saved`
-  in the window, so the tallest bar always fills the panel.
-- Y-axis gutter prints the value at each row; x-axis prints minute labels, thinning
-  to every third bar above 15 events.
+- Up to `MAX_BARS = 20` events, oldest on the left.
+- `CHART_HEIGHT = 10` rows, scaled by the largest `saved` in the window (`or 1` so a
+  zero window cannot divide by zero).
+- Bar height is `int((val / max_val) * 10)` — truncated, so a low-but-nonzero value
+  can render as no bar.
+- A filled cell is `██ `, an empty cell is three spaces.
+- Y-axis gutter is `{value:>6} ┤ `; baseline is `       └` + `───` per bar.
+- X labels are minutes; above 15 events only every third bar is labelled.
 
-### 4.2 Semantics of the numbers — explicit
+KPI figures are window sums, not lifetime: total `saved`, total `cost_usd` and event
+count over the same ≤20 events the chart plots.
 
-The dashboard renders a *window*, not a lifetime total, and the two must not be
-confused:
+Palette — 24-bit hex, from the original HTML mockup:
 
-- "Tokens Saved (Recent)" = sum of `saved` across the display window only.
-- "Cost Avoided" = sum of `cost_usd` across the same window. It currently carries
-  no "recent" qualifier in its label; **v1 must make the window explicit on every
-  figure.**
-- "Compressions" = event count in the window.
-
-### 4.3 Palette
-
-Brand colours are the 24-bit hex values from the original HTML mockup. `rich`
-resolves them against whatever colour system the terminal reports, so a 256-colour
-or monochrome terminal gets a faithful approximation rather than an error; measured
-on `TERM=dumb`, `vt100` and `xterm-256color`.
-
-| Name | Hex | Role |
+| Name | Hex | Used for |
 |---|---|---|
 | `HARVEST` | `#BB9457` | bars, KPI numerals, chart border |
-| `ESPRESSO` | `#432818` | panel background |
+| `ESPRESSO` | `#432818` | panel `style` |
 | `RUST` | `#99582A` | borders, axes, table columns |
 | `MAROON` | `#6F1D1B` | header background, model column |
 | `IVORY` | `#EFE3D2` | text and labels |
 
-## 5. CLI surface
+`rich` maps these onto whatever colour system the terminal reports; verified to draw
+on `TERM=dumb`, `vt100` and `xterm-256color`.
 
-Implemented in `headroom_charts.cli`. The baseline script hardcoded all of it.
+## 4. Invocation
 
 ```
-headroom-charts [OPTIONS]
-
-  --file PATH       events JSONL to read   [default ~/.headroom/savings_events.jsonl]
-  --bars N          events in the chart window   [default 20]
-  --height N        chart rows   [default 10]
-  --interval SECS   repaint period   [default 1.0]
-  --events N        rows in the footer table   [default 5]
-  --once            render one frame and exit (no live loop; for CI/screenshots)
-  --demo            synthesise events instead of reading a file
-  --no-color        pin the palette to 8 colours instead of the terminal's best match
-  --version / --help
+headroom-charts
 ```
 
-Exit codes: `0` clean (including `--once`), `130` on `Ctrl-C`, `2` for a bad flag
-or unreadable file.
+No options, matching the original script. Exits `0`, including on `Ctrl-C`, which the
+loop catches and passes.
 
-## 6. Non-goals
+## 5. Non-goals
 
-- Not writing, rotating, or backfilling the events file.
-- Not a proxy, not a cost estimator — it displays `cost_usd` as given.
-- No network access, no telemetry, no config file in v1.
-- No mouse interaction, no panes, no historical zoom.
-- Not a web dashboard; the HTML it was mocked from is out of scope.
+- **Any change to rendering, layout sizes, geometry or palette.** Packaging is a
+  distribution change, not a redesign.
+- Reading any file other than the one path above.
+- Writing, rotating or backfilling the events log.
+- Cost estimation — `cost_usd` is displayed as given.
+- Network access, telemetry, config files, mouse input, panes, history zoom.
 
-## 7. Acceptance criteria
+## 6. Fidelity acceptance
 
-1. `uvx headroom-charts` runs on a machine with no project venv and no `rich`
-   installed.
-2. Pointed at an absent or empty file it renders the full layout and
-   `Waiting for data...` rather than raising.
-3. Pointed at a file with a truncated final line it skips that line and keeps
-   painting.
-4. Appending a line is reflected within one repaint interval.
-5. Growing the file to 100k lines does not grow resident memory — the read is
-   bounded, not a full-file `readlines()`.
-6. `Ctrl-C` exits with the terminal restored to the primary screen, cursor and
-   colours intact.
-7. Works at 80×24 (chart degrades, nothing crashes) and at 200×50.
-8. `--once` output is deterministic for a fixed input file, so it is snapshot-
-   testable.
-9. `--no-color` produces a readable dashboard on a terminal without truecolor.
+The gate for every future packaging change:
+
+1. `python headroom-charts.py` and the installed `headroom-charts` command emit
+   **identical bytes** for the same terminal size and the same events file.
+2. Both exit `0` on `Ctrl-C`.
+3. A rendered frame at 100×30 against the test fixture equals
+   [`tests/golden/frame_100x30.txt`](../tests/golden/frame_100x30.txt), which was
+   captured from the original script.
+4. Changing any constant in §3 — a hex, `MAX_BARS`, `CHART_HEIGHT`, a zone size —
+   fails that golden test rather than passing review.
+
+Known defects in the original are preserved deliberately and tracked separately; see
+docs/ARCHITECTURE.md §5.

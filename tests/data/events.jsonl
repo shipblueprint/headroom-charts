@@ -1,0 +1,6 @@
+{"v":2,"ts":"2026-10-28T09:00:00+00:00","before":60000,"after":55000,"saved":5000,"cost_usd":0.0150,"model":"beam","client":"opencode","source":"proxy","pid":100,"saved_tool_schema":0}
+{"v":2,"ts":"2026-10-28T09:01:00+00:00","before":40000,"after":37500,"saved":2500,"cost_usd":0.0075,"model":"beam","client":"opencode","source":"proxy","pid":100,"saved_tool_schema":0}
+{"v":2,"ts":"2026-10-28T09:02:00+00:00","before":31000,"after":23700,"saved":7300,"cost_usd":0.0219,"model":"stepfun-ai/step-5-preview","client":"opencode","source":"proxy","pid":101,"saved_tool_schema":0}
+{"v":2,"ts":"2026-10-28T09:03:00+00:00","before":50000,"after":48000,"saved":2000,"cost_usd":0.0060,"model":"beam","client":"opencode","source":"proxy","pid":101,"saved_tool_schema":0}
+{"v":2,"ts":"2026-10-28T09:04:00+00:00","before":20000,"after":18000,"saved":2000,"cost_usd":0.0060,"model":"beam","client":"opencode","source":"proxy","pid":102,"saved_tool_schema":0}
+{"v":2,"ts":"2026-10-28T09:05:00+00:00","before":1000,"after":900,"saved":100,"cost_usd":0.0003,"model":"beam","client":"opencode","source":"proxy","pid":102,"saved_tool_schema":0}
