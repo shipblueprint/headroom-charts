@@ -1,6 +1,5 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![GitHub release](https://img.shields.io/github/v/release/shipblueprint/headroom-charts)
 
-```markdown
 # headroom-charts
 
 ![Headroom Charts Dashboard](https://github.com/shipblueprint/headroom-charts/blob/main/docs/headroom-chart.png?raw=true)
@@ -46,4 +45,3 @@ Reads `ts`, `model`, `saved`, and `cost_usd` from each line of
 ## License
 
 MIT
-```
