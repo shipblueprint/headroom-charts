@@ -5,6 +5,8 @@
 
 Live terminal dashboard for Headroom context-compression savings.
 
+![Headroom Charts Dashboard](docs/headroom-chart.png)
+
 Tails `~/.headroom/savings_events.jsonl` and redraws once a second: tokens saved, cost avoided, a bar chart of recent compressions, and the latest events.
 
 ## Install
