@@ -3,9 +3,9 @@
 ```markdown
 # headroom-charts
 
-Live terminal dashboard for Headroom context-compression savings.
+![Headroom Charts Dashboard](https://raw.githubusercontent.com/shipblueprint/headroom-charts/main/docs/headroom-chart.png)
 
-![Headroom Charts Dashboard](docs/headroom-chart.png)
+Live terminal dashboard for Headroom context-compression savings.
 
 Tails `~/.headroom/savings_events.jsonl` and redraws once a second: tokens saved, cost avoided, a bar chart of recent compressions, and the latest events.
 
