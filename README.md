@@ -2,7 +2,7 @@
 
 # headroom-charts
 
-![Headroom Charts Dashboard](https://github.com/shipblueprint/headroom-charts/blob/main/docs/headroom-chart.png?raw=true)
+![Headroom Charts Dashboard](https://raw.githubusercontent.com/shipblueprint/headroom-charts/main/docs/headroom-chart.png)
 
 Live terminal dashboard for Headroom context-compression savings.
 
