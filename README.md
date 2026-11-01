@@ -3,7 +3,7 @@
 ```markdown
 # headroom-charts
 
-![Headroom Charts Dashboard](https://raw.githubusercontent.com/shipblueprint/headroom-charts/main/docs/headroom-chart.png)
+![Headroom Charts Dashboard](docs/headroom-chart.png)
 
 Live terminal dashboard for Headroom context-compression savings.
 
